@@ -1,6 +1,5 @@
 let mongoose = require('mongoose');
-let Contato = require('../models/contato.model');
-let Operadora = require('../models/operadora.model');
+let Contato = require('./contato.model');
 
 let db_path = process.env.LISTA_TELEFONICA_MONGODB_ADDRESS || 'mongodb://127.0.0.1/lista-telefonica';
 
@@ -18,78 +17,38 @@ mongoose.connect(db_path, options)
         console.log(`[Error] => mongoose.connect('${db_path}') : ${err.message} `);
     });
 
-let handleError = (err, res) => {
+let handleError = (err) => {
     var message = (err && err.message) ? err.message : 'Erro desconhecido';
     console.log(`[Error] => ${message}`);
-    res.status(500).send(message);
 };
 
-module.exports = {
-    getServiceDescription: () => {
-       return `driver: mongoose, address: ${db_path}`;
-    },
-    
-    getContatos: (req, res) => { 	
-        let promise = Contato.find({}).exec();
+let pageNumber = 11;
+let numberOfLines = 10;
+
+let skipNumber = (pageNumber -1) * numberOfLines;
+
+let dataPromise = Contato
+    .find({})
+    .sort({nome: 'asc'})
+    .skip(skipNumber)
+    .limit(numberOfLines)
+    .select({nome: 1, id: -1})
+    .exec();
+
+let countPromise = Contato  
+    .find({}).count().exec();
         
-        promise
-            .then(result => res.json(result))
-            .catch(err => {
-                handleError(err, res);
-            });	
-    },
-
-    getContato: (req, res) => { 	
-        let contatoId = (req.params.contatoId || 0);
-        let promise = Contato.findOne({ serial: contatoId }).exec();
-
-        promise
-            .then(result => {
-                if (result) {
-                    res.json(result);
-                } else {
-                    res.status(404).send('Not found');
-                }
-            })
-            .catch(err => {
-                handleError(err, res);
-            });
-    },
-
-    saveContato: (req, res) => { 	
-        let promise = Contato.create(req.body);
-
-        promise
-            .then(result => res.json(result))
-            .catch(err => {
-                handleError(err, res);
-            });
-    },
-
-    deleteContato: (req, res) => {
-        let contatoId = (req.params.contatoId || 0); 
-        let promise = Contato.findOneAndRemove({ serial: contatoId }).exec();
-
-        promise
-            .then(result => {
-                if (result) {
-                    res.json({deleted: true});
-                } else {
-                    res.json({deleted: false});
-                }
-            })
-            .catch(err => {
-                handleError(err, res);
-            });        
-    },
-
-    getOperadoras: (req, res) => { 		
-        let promise = Operadora.find({}).exec();
+Promise.all([dataPromise, countPromise])
+    .then(result => {
+        let totalPages = Math.ceil(result[1] / numberOfLines);
         
-        promise
-            .then(result => res.json(result))
-            .catch(err => {
-                handleError(err, res);
-            });	
-    }
-};
+        console.log({
+            data: result[0],
+            totalPages: totalPages,
+            pageNumber: pageNumber
+        });
+        process.exit(0);
+    })
+    .catch(err => {
+        handleError(err);
+    });	
